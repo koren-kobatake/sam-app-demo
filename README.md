@@ -38,6 +38,7 @@ sam deploy \
   --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
   --region ap-northeast-1
 
+
 =================
  SessionManager
 =================
@@ -52,6 +53,7 @@ sam deploy \
     「インスタンスの詳細」タブで「IAMロールの変更」をクリックします。
     作成したIAMロール（例： SSMAccessRole ）を選択し、「更新」をクリックします。
 
+
 =================
  SSH
 =================
@@ -59,15 +61,14 @@ ssh -i ~/.aws/sam-test-key.pem ec2-user@ec2-18-183-83-160.ap-northeast-1.compute
 scp -i ~/.aws/sam-test-key.pem ~/.aws/sam-test-key.pem ec2-user@ec2-18-183-83-160.ap-northeast-1.compute.amazonaws.com:/home/ec2-user/
 ssh -i sam-test-key.pem ec2-user@ip-10-5-5-125.ap-northeast-1.compute.internal
 
+
 =================
  CURL
 =================
-curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/Stage/private-api-endpoint/private-api
-curl -X POST "https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/Stage/private-api-endpoint"
-curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/private-api-endpoint/private-api
-curl -X POST "https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/private-api-endpoint"
-
-curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/test/private-api-endpoint/private-api
+curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/hello-api-endpoint/private-api
+curl -X POST "https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/hello-api-endpoint"
+curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/bye-api-endpoint/private-api
+curl -X POST "https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/bye-api-endpoint"
 
 
 =================

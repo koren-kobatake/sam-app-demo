@@ -38,7 +38,6 @@ sam deploy \
   --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
   --region ap-northeast-1
 
-
 =================
  SessionManager
 =================
@@ -63,9 +62,18 @@ ssh -i sam-test-key.pem ec2-user@ip-10-5-5-125.ap-northeast-1.compute.internal
 =================
  CURL
 =================
-curl https://pmkxxbeptl.execute-api.ap-northeast-1.amazonaws.com/Stage/private-api-endpoint/private-api
-curl -X POST "https://pmkxxbeptl.execute-api.ap-northeast-1.amazonaws.com/Stage/private-api-endpoint"
-curl https://pmkxxbeptl.execute-api.ap-northeast-1.amazonaws.com/dev/private-api-endpoint/private-api
-curl -X POST "https://pmkxxbeptl.execute-api.ap-northeast-1.amazonaws.com/dev/private-api-endpoint"
+curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/Stage/private-api-endpoint/private-api
+curl -X POST "https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/Stage/private-api-endpoint"
+curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/private-api-endpoint/private-api
+curl -X POST "https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/dev/private-api-endpoint"
 
-curl https://pmkxxbeptl.execute-api.ap-northeast-1.amazonaws.com/test/private-api-endpoint/private-api
+curl https://exro9eq8f3.execute-api.ap-northeast-1.amazonaws.com/test/private-api-endpoint/private-api
+
+
+=================
+ 参考
+=================
+AWS SAMで「Stage」ステージが作られるバグを回避する
+https://medium.com/veltra-engineering/avoid-aws-sam-stage-stage-45f7331b7b5d
+https://dev.classmethod.jp/articles/aws-sam-delete-deploy-unused-stage/
+

@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 
+Globals:
+  Function:
+    Timeout: 3
+  Api:
+    OpenApiVersion: 3.0.2
+
 Mappings:
   Constant:
     ResourceId:
@@ -17,13 +23,13 @@ Resources:
   ######################################################################
 
   # Lambda
-  PrivateApiFunction:
+  HelloApiFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: lambda/function/hello/
       Handler: app.lambdaHandler
       Runtime: nodejs20.x
-      FunctionName: private-api
+      FunctionName: hello-api
       MemorySize: 128
       Timeout: 5
       Role: !GetAtt PrivateApiRole.Arn
@@ -79,10 +85,10 @@ Resources:
   ######################################################################
 
   # Api GatewayへのLambdaアクセス許可
-  PrivateApiFunctionPermission:
+  HelloApiFunctionPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !GetAtt PrivateApiFunction.Arn
+      FunctionName: !GetAtt HelloApiFunction.Arn
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${PrivateApiApiGateway}/*'
@@ -120,7 +126,7 @@ Resources:
               # API GatewayがLambdaを呼び出す設定
               x-amazon-apigateway-integration:
                 contentHandling: "CONVERT_TO_TEXT"
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateApiFunction.Arn}/invocations"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${HelloApiFunction.Arn}/invocations"
                 passthroughBehavior: when_no_templates
                 payloadFormatVersion: "1.0"
                 connectionType: "INTERNET"
@@ -131,7 +137,7 @@ Resources:
               # API GatewayがLambdaを呼び出す設定
               x-amazon-apigateway-integration:
                 contentHandling: "CONVERT_TO_TEXT"
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${PrivateApiFunction.Arn}/invocations"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${HelloApiFunction.Arn}/invocations"
                 passthroughBehavior: when_no_templates
                 payloadFormatVersion: "1.0"
                 connectionType: "INTERNET"

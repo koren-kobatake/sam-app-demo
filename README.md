@@ -1,4 +1,16 @@
 =================
+ VPC作成（cdk_demo_public）
+=================
+$ cd vpc_v2
+$ python3 -m venv .env
+$ source .env/bin/activate
+$ pip install -r requirements.txt
+$ export ENV=Dev
+$ export REGION=ap-northeast-1
+$ export ACCOUNT_ID=XXXXXXXXXXXXX
+$ cdk deploy
+
+=================
  PUBLIC
 =================
 sam build
@@ -78,3 +90,12 @@ AWS SAMで「Stage」ステージが作られるバグを回避する
 https://medium.com/veltra-engineering/avoid-aws-sam-stage-stage-45f7331b7b5d
 https://dev.classmethod.jp/articles/aws-sam-delete-deploy-unused-stage/
 
+
+===================================================
+ CloudFormation（CodePipeline）
+===================================================
+aws cloudformation deploy \
+  --stack-name sam-app-pipeline-stack \
+  --template-file ./infra/cloudformation/cfn_sam_codepipeline.yml \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --region ap-northeast-1

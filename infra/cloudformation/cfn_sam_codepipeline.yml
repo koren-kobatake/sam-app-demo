@@ -107,12 +107,14 @@ Resources:
                   - cloudformation:ExecuteChangeSet
                   - cloudformation:ListChangeSets
                   - cloudformation:ListStackResources
+                  - iam:PassRole
                 Resource: 
                   - !Sub 'arn:aws:s3:::${S3BucketName}'
                   - !Sub 'arn:aws:s3:::${S3BucketName}/*'
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/*'
                   - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/sam-app-demo-local-stack/*'
                   - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/sam-app-demo-local-stack:*'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/sam-app-pipeline-stack-CloudFormationRole-*'
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project

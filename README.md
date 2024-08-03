@@ -97,5 +97,5 @@ https://dev.classmethod.jp/articles/aws-sam-delete-deploy-unused-stage/
 aws cloudformation deploy \
   --stack-name sam-app-pipeline-stack \
   --template-file ./infra/cloudformation/cfn_sam_codepipeline.yml \
-  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
   --region ap-northeast-1

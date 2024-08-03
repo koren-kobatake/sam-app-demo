@@ -65,9 +65,9 @@ Resources:
               InputArtifacts:
                 - Name: BuildOutput
               Configuration:
-                ActionMode: CHANGE_SET_REPLACE
+                ActionMode: CREATE_UPDATE
                 StackName: sam-app-demo-local-stack
-                Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM
+                Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
                 TemplatePath: BuildOutput::packaged.yaml
                 RoleArn: !GetAtt CloudFormationRole.Arn
                 ChangeSetName: CodePipelineChangeSet
@@ -107,6 +107,9 @@ Resources:
                   - cloudformation:ExecuteChangeSet
                   - cloudformation:ListChangeSets
                   - cloudformation:ListStackResources
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
                   - iam:PassRole
                 Resource: 
                   - !Sub 'arn:aws:s3:::${S3BucketName}'

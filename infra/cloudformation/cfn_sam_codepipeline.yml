@@ -1,10 +1,16 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  S3BucketName:
+    Type: String
+    Default: sam-app-demo-pipeline
+    Description: The name of the S3 bucket for storing artifacts
+
 Resources:
   # S3バケットの作成
   ArtifactBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: sam-app-demo-pipeline
+      BucketName: !Ref S3BucketName
       VersioningConfiguration:
         Status: Enabled
 
@@ -50,19 +56,6 @@ Resources:
               RunOrder: 1
         - Name: Deploy
           Actions:
-            - Name: Package
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Provider: CodeBuild
-                Version: 1
-              InputArtifacts:
-                - Name: BuildOutput
-              OutputArtifacts:
-                - Name: PackageOutput
-              Configuration:
-                ProjectName: !Ref CodeBuildPackageProject
-              RunOrder: 1
             - Name: Deploy
               ActionTypeId:
                 Category: Deploy
@@ -70,14 +63,15 @@ Resources:
                 Provider: CloudFormation
                 Version: 1
               InputArtifacts:
-                - Name: PackageOutput
+                - Name: BuildOutput
               Configuration:
                 ActionMode: CHANGE_SET_REPLACE
                 StackName: sam-app-demo-local-stack
-                Capabilities: CAPABILITY_IAM CAPABILITY_NAMED_IAM
-                TemplatePath: PackageOutput::packaged.yaml
+                Capabilities: CAPABILITY_IAM,CAPABILITY_NAMED_IAM
+                TemplatePath: BuildOutput::packaged.yaml
                 RoleArn: !GetAtt CloudFormationRole.Arn
-              RunOrder: 2
+                ChangeSetName: CodePipelineChangeSet
+              RunOrder: 1
 
   PipelineRole:
     Type: AWS::IAM::Role
@@ -106,10 +100,19 @@ Resources:
                   - s3:GetObjectVersion
                   - s3:PutObject
                   - s3:PutObjectAcl
+                  - cloudformation:DescribeStacks
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:ListChangeSets
+                  - cloudformation:ListStackResources
                 Resource: 
-                  - !Sub 'arn:aws:s3:::sam-app-demo-pipeline'
-                  - !Sub 'arn:aws:s3:::sam-app-demo-pipeline/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
                   - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/sam-app-demo-local-stack/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/sam-app-demo-local-stack:*'
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -126,25 +129,8 @@ Resources:
         EnvironmentVariables:
           - Name: AWS_DEFAULT_REGION
             Value: !Ref 'AWS::Region'
-      ServiceRole: !GetAtt CodeBuildRole.Arn
-
-  CodeBuildPackageProject:
-    Type: AWS::CodeBuild::Project
-    Properties:
-      Name: MyPackageProject
-      Source:
-        Type: CODEPIPELINE
-      Artifacts:
-        Type: CODEPIPELINE
-      Environment:
-        ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/standard:6.0
-        Type: LINUX_CONTAINER
-        EnvironmentVariables:
-          - Name: AWS_DEFAULT_REGION
-            Value: !Ref 'AWS::Region'
           - Name: S3_BUCKET
-            Value: !Ref ArtifactBucket
+            Value: !Ref S3BucketName
       ServiceRole: !GetAtt CodeBuildRole.Arn
 
   CodeBuildRole:

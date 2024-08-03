@@ -11,7 +11,7 @@ Resources:
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: MyPipeline
+      Name: SAM-Pipeline
       RoleArn: !GetAtt PipelineRole.Arn
       ArtifactStore:
         Type: S3
@@ -102,7 +102,14 @@ Resources:
                   - codebuild:BatchGetProjects
                   - codebuild:ListProjects
                   - codepipeline:*
-                Resource: '*'
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                Resource: 
+                  - !Sub 'arn:aws:s3:::sam-app-demo-pipeline'
+                  - !Sub 'arn:aws:s3:::sam-app-demo-pipeline/*'
+                  - !Sub 'arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/*'
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project

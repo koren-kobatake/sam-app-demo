@@ -6,3 +6,419 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     body: JSON.stringify({ message: 'Hello, World!' }),
   };
 };
+=====================================================
+
+アカウントが異なるDEV環境とSTG環境が存在する
+
+CodeCommitからソースコードを取得してSAMでLambdaとAPIGatewayをデプロイするCodePipelineを作成したい
+
+DEV環境に関しては、CodeCommitからソースコードを取得して、ビルド、デプロイを実行したい
+STG環境に関しては、DEV環境でCodeCommitから取得したソースコードを利用して、ビルド、デプロイを実行したい
+つまりSTG環境では、CodeCommitからソースコードを取得するのではなく、なんらかの形でDEV環境からソースを受けわたす必要がある
+受け渡しはSTG環境からDEV環境に取得しにいく方式で行いたい
+
+またSTG環境のパイプラインの実行トリガーを検討したい
+DEV環境のDeployが成功したら、自動的にSTG環境のパイプラインが起動するようにしたい
+
+DEV環境とSTG環境のCodePipelineのCloudFormationのサンプルコードを提示してほしい
+処理がわかりやすいようにコメントを付与してほしい
+また解説もお願いします
+
+=====================================================
+
+以下に、異なるアカウントで動作するDEV環境とSTG環境でのCodePipelineのCloudFormationテンプレートのサンプルコードを提供します。STG環境のパイプラインは、DEV環境のデプロイ成功をトリガーとして起動されます。また、STG環境のソースコードは、DEV環境から取得する形になります。
+
+### 1. DEV環境のCloudFormationテンプレート
+
+まずは、DEV環境のCodePipelineを設定します。ここでは、CodeCommitからソースコードを取得し、ビルド、デプロイを行います。また、ソースコードをS3に保存し、STG環境で利用できるようにします。
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: DEV環境用のCodePipelineテンプレート
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: The name of the project
+
+Resources:
+  # S3 Bucket for storing the source artifacts
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-dev-artifacts'
+
+  # IAM Role for CodePipeline
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:DeleteObject
+                Resource: !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
+              - Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetProjects
+                Resource: '*'
+
+  # CodePipeline for DEV environment
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}-dev-pipeline'
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket  # S3バケットに成果物を保存
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: SourceAction
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeCommit
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceOutput  # 取得したソースコードをSourceOutputに保存
+              Configuration:
+                RepositoryName: !Sub '${ProjectName}-repo'
+                BranchName: main
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              InputArtifacts:
+                - Name: SourceOutput  # SourceOutputを使用してビルド
+              OutputArtifacts:
+                - Name: BuildOutput  # ビルド結果をBuildOutputに保存
+              Configuration:
+                ProjectName: !Ref BuildProject
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              InputArtifacts:
+                - Name: BuildOutput  # BuildOutputを使用してデプロイ
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Sub '${ProjectName}-dev-stack'
+                Capabilities: CAPABILITY_IAM
+                TemplatePath: BuildOutput::output.yaml
+              RunOrder: 1
+
+  # CodeBuild Project for DEV environment
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${ProjectName}-dev-build'
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+      EnvironmentVariables:
+        - Name: ENVIRONMENT
+          Value: "DEV"  # DEV環境用のビルド用環境変数
+
+Outputs:
+  ArtifactBucketName:
+    Value: !Ref ArtifactBucket
+    Description: The name of the S3 bucket where source artifacts are stored
+```
+
+### 2. STG環境のIAMロール設定 (クロスアカウントアクセス)
+
+STG環境において、DEV環境からのソースコード取得およびCodePipeline起動を可能にするためのIAMロールを作成します。
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Role for cross-account access to trigger STG CodePipeline from DEV account
+
+Parameters:
+  DevAccountId:
+    Type: String
+    Description: The AWS Account ID of the DEV environment
+
+  StgPipelineName:
+    Type: String
+    Description: The name of the STG environment CodePipeline
+
+Resources:
+  # IAM Role to allow DEV account to trigger STG Pipeline
+  CrossAccountTriggerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'CrossAccountTriggerRole-${AWS::StackName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref DevAccountId  # DEV環境のアカウントIDを指定
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AllowStartPipelineExecution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - codepipeline:StartPipelineExecution  # STG環境のパイプラインを開始する権限
+                Resource: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${StgPipelineName}
+
+Outputs:
+  CrossAccountTriggerRoleArn:
+    Value: !GetAtt CrossAccountTriggerRole.Arn
+    Description: The ARN of the IAM Role for cross-account access
+```
+
+### 3. STG環境のCloudFormationテンプレート
+
+STG環境で、DEV環境のアーティファクトを使用してビルド・デプロイを行うCodePipelineを設定します。
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: STG環境用のCodePipelineテンプレート
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: The name of the project
+
+  DevArtifactBucket:
+    Type: String
+    Description: The name of the S3 bucket where DEV artifacts are stored
+
+  CrossAccountRoleArn:
+    Type: String
+    Description: The ARN of the cross-account IAM Role in STG Account
+
+Resources:
+  # IAM Role for CodePipeline
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodePipelinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: !Sub 'arn:aws:s3:::${DevArtifactBucket}/*'  # DEV環境のS3バケットからソースコードを取得する権限
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - lambda:*
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetProjects
+                Resource: '*'
+
+  # CodePipeline for STG environment
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub '${ProjectName}-stg-pipeline'
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Sub '${ProjectName}-stg-artifacts'  # STG環境用のアーティファクトを保存するS3バケット
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: GetDevSource
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: 1
+              OutputArtifacts:
+                - Name: SourceOutput  # DEV環境のS3バケットから取得したソースコードをSourceOutputとして保存
+              Configuration:
+                S3Bucket: !Ref DevArtifactBucket  # DEV環境のS3バケット名
+                S3ObjectKey: SourceOutput.zip  # DEV環境で保存されたソースコードのキー
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version:
+
+ 1
+              InputArtifacts:
+                - Name: SourceOutput  # DEV環境から取得したソースコードを使用してビルドを実行
+              OutputArtifacts:
+                - Name: BuildOutput  # ビルド結果をBuildOutputとして保存
+              Configuration:
+                ProjectName: !Ref BuildProject
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              InputArtifacts:
+                - Name: BuildOutput  # ビルド結果を使用してSTG環境にデプロイを実行
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                StackName: !Sub '${ProjectName}-stg-stack'
+                Capabilities: CAPABILITY_IAM
+                TemplatePath: BuildOutput::output.yaml
+              RunOrder: 1
+
+  # CodeBuild Project for STG environment
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub '${ProjectName}-stg-build'
+      Source:
+        Type: CODEPIPELINE
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+      EnvironmentVariables:
+        - Name: ENVIRONMENT
+          Value: "STG"  # STG環境用のビルド用環境変数
+
+Outputs:
+  PipelineName:
+    Value: !Ref CodePipeline
+    Description: The name of the CodePipeline created by this template
+```
+
+### 4. DEV環境でのCloudWatch Events設定 (クロスアカウントでSTG環境のパイプラインをトリガー)
+
+最後に、DEV環境でデプロイが成功した後に自動的にSTG環境のパイプラインを起動するために、CloudWatch Eventsルールを設定します。
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudWatch Events Rule to trigger STG Pipeline in another AWS Account after DEV Pipeline deploy success
+
+Parameters:
+  DevPipelineName:
+    Type: String
+    Description: Name of the DEV environment CodePipeline
+
+  CrossAccountRoleArn:
+    Type: String
+    Description: The ARN of the IAM Role in STG Account for cross-account access
+
+  StgPipelineName:
+    Type: String
+    Description: Name of the STG environment CodePipeline
+
+Resources:
+  # CloudWatch Events Rule to trigger STG Pipeline on DEV Pipeline Deploy Success
+  DevPipelineDeploySuccessRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - "aws.codepipeline"
+        detail-type:
+          - "CodePipeline Pipeline Execution State Change"
+        detail:
+          pipeline:
+            - !Ref DevPipelineName
+          state:
+            - "SUCCEEDED"  # DEV環境のパイプラインが成功した時のイベントをキャッチ
+      Targets:
+        - Arn: !Ref CrossAccountRoleArn
+          RoleArn: !Ref CrossAccountRoleArn
+          Id: "STGPipelineTrigger"
+          InputTransformer:
+            InputPathsMap:
+              "PipelineName": "$.detail.pipeline"
+            InputTemplate: '{"pipelineName":"<STG Pipeline Name>", "action":"<Start STG Pipeline>"}'
+
+  # Lambda Function to Assume Role and Start STG Pipeline
+  StartStgPipelineFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !Ref CrossAccountRoleArn  # STG環境のIAMロールを使用
+      Runtime: nodejs14.x
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          exports.handler = async (event) => {
+              const codepipeline = new AWS.CodePipeline();
+              const params = {
+                  name: event.pipelineName
+              };
+              try {
+                  await codepipeline.startPipelineExecution(params).promise();
+                  console.log(`Pipeline ${event.pipelineName} started successfully`);
+              } catch (error) {
+                  console.error(`Failed to start pipeline: ${error.message}`);
+              }
+          };
+      Timeout: 30
+
+Outputs:
+  DevPipelineDeploySuccessRuleName:
+    Value: !Ref DevPipelineDeploySuccessRule
+    Description: Name of the CloudWatch Events rule in DEV Account
+```
+
+### 解説
+
+1. **DEV環境のパイプライン**: DEV環境でのCodePipelineは、CodeCommitからソースコードを取得し、ビルド、デプロイを実行します。また、ビルドした成果物（ソースコード）をS3に保存しておきます。
+
+2. **STG環境のIAMロール**: STG環境にクロスアカウントアクセスを許可するIAMロールを作成します。このロールは、DEV環境からSTG環境のパイプラインを起動するために使用されます。
+
+3. **STG環境のパイプライン**: STG環境では、DEV環境で保存されたソースコードをS3バケットから取得し、それを使用してビルドおよびデプロイを行います。
+
+4. **CloudWatch EventsでSTGパイプラインを起動**: DEV環境のデプロイが成功すると、CloudWatch Eventsがトリガーされ、STG環境のパイプラインを起動します。このトリガーはクロスアカウントのIAMロールを使用して行います。
+
+これにより、DEV環境のデプロイが成功すると自動的にSTG環境で再ビルドとデプロイが行われる、効率的かつセキュアなパイプラインを構築できます。
